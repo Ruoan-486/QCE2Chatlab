@@ -53,14 +53,14 @@ ChatLab（本地知识库，端口 3110）
    - 安装完成后，打开 CMD 输入 `python --version` 确认显示版本号
 
 2. 下载安装 **QCE（QQ Chat Exporter）**
-   - 访问 https://github.com/QQ-Chat-Exporter/releases
+   - 访问 https://github.com/shuakami/qq-chat-exporter/releases
    - 下载最新版本
    - 解压到任意目录（建议放桌面）
    - 首次启动 QCE，扫码登录 QQ
    - 确认 QCE 能正常导出聊天记录
 
 3. 下载安装 **ChatLab**
-   - 访问 https://github.com/chatlab/releases
+   - 访问 https://chatlab.fun/cn
    - 下载最新 Windows 版本
    - 解压到任意目录
    - 首次启动，初始化知识库
