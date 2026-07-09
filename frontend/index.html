@@ -1,0 +1,1130 @@
+<!--
+QCE2ChatLab - QQ聊天记录自动同步工具
+Copyright (c) 2026 Ruoan
+许可证: 自定义非商用 NC-BY-SA 协议（详见 LICENSE）
+禁止商用 · 强制保留署名 · 衍生项目必须附带相同协议
+-->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QCE2ChatLab</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:#0f1419;color:#e7e9ea;min-height:100vh}
+.header{background:#1a1f2b;border-bottom:1px solid #2f3336;padding:16px 24px;display:flex;align-items:center;gap:12px}
+.header h1{font-size:20px;font-weight:600;color:#1d9bf0}
+.container{max-width:920px;margin:0 auto;padding:24px}
+.card{background:#1a1f2b;border:1px solid #2f3336;border-radius:12px;padding:20px;margin-bottom:16px}
+.card-title{font-size:15px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.row{display:flex;gap:12px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.row label{min-width:100px;font-size:13px;color:#8b98a5}
+input[type="text"],input[type="number"],input[type="password"],select{
+  background:#0f1419;border:1px solid #2f3336;border-radius:6px;
+  padding:8px 12px;color:#e7e9ea;font-size:13px;outline:none
+}
+input:focus,select:focus{border-color:#1d9bf0}
+.btn{padding:8px 16px;border-radius:20px;font-size:14px;font-weight:600;border:none;cursor:pointer;transition:.2s}
+.btn-primary{background:#1d9bf0;color:#fff}
+.btn-primary:hover{background:#1a8cd8}
+.btn-secondary{background:transparent;border:1px solid #536471;color:#e7e9ea}
+.btn-secondary:hover{background:rgba(255,255,255,.06)}
+.btn-danger{background:#f4212e;color:#fff}
+.btn-sm{padding:4px 12px;font-size:12px}
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.status-dot.ok{background:#00ba7c}
+.status-dot.err{background:#f4212e}
+.status-tag{display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:4px 12px;border-radius:20px}
+.status-tag.online{background:rgba(0,186,124,.15);color:#00ba7c}
+.status-tag.offline{background:rgba(244,33,46,.15);color:#f4212e}
+
+.peer-list{max-height:300px;overflow-y:auto}
+.peer-item{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid #2f3336;border-radius:8px;margin-bottom:8px}
+.peer-item:hover{background:rgba(255,255,255,.03)}
+.peer-name{font-weight:500}
+.peer-meta{font-size:12px;color:#71767b}
+
+.log-box{background:#0f1419;border:1px solid #2f3336;border-radius:8px;padding:12px;max-height:300px;overflow-y:auto;font-family:'Consolas',monospace;font-size:12px;line-height:1.6}
+.log-line{color:#8b98a5}
+.log-line.error{color:#f4212e}
+.log-line.success{color:#00ba7c}
+.empty{text-align:center;padding:40px;color:#536471}
+
+.tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid #2f3336}
+.tab{padding:10px 18px;font-size:14px;font-weight:500;color:#71767b;cursor:pointer;border-bottom:2px solid transparent;transition:.2s}
+.tab:hover{color:#e7e9ea}
+.tab.active{color:#1d9bf0;border-bottom-color:#1d9bf0}
+
+.hidden{display:none!important}
+.flex-between{display:flex;justify-content:space-between;align-items:center}
+.gap-8{gap:8px}
+.mt-8{margin-top:8px}
+.mt-12{margin-top:12px}
+.mb-8{margin-bottom:8px}
+.text-sm{font-size:12px;color:#71767b}
+.text-warn{font-size:12px;color:#f0c040}
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px}
+.badge-group{background:rgba(29,155,240,.15);color:#1d9bf0}
+.badge-friend{background:rgba(0,186,124,.15);color:#00ba7c}
+.badge-ok{background:rgba(0,186,124,.15);color:#00ba7c}
+.badge-fail{background:rgba(244,33,46,.15);color:#f4212e}
+
+/* 历史记录卡片 */
+.hist-card{background:#0f1419;border:1px solid #2f3336;border-radius:8px;padding:12px;margin-bottom:8px;font-size:13px}
+.hist-card:hover{border-color:#536471}
+.hist-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.hist-peer{font-weight:600;color:#e7e9ea}
+.hist-status{font-size:12px;font-weight:500}
+.hist-detail{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:#71767b}
+.hist-detail span{white-space:nowrap}
+.hist-detail .icon{opacity:.6}
+.hist-duration{font-size:11px;color:#536471}
+
+.day-chk{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border:1px solid #2f3336;border-radius:6px;cursor:pointer;font-size:13px;transition:.2s;user-select:none}
+.day-chk:hover{border-color:#536471;background:rgba(255,255,255,.04)}
+.day-chk input{display:none}
+.day-chk:has(input:checked){border-color:#1d9bf0;background:rgba(29,155,240,.12);color:#1d9bf0}
+
+/* 批量选择相关 */
+.hist-checkbox{width:16px;height:16px;margin:0 8px 0 0;cursor:pointer;accent-color:#1d9bf0;flex:none}
+.hist-card-inner{flex:1}
+
+/* 开关 */
+.toggle-wrap{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.toggle{position:relative;width:44px;height:24px;background:#536471;border-radius:12px;transition:.2s}
+.toggle::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;background:#fff;border-radius:50%;transition:.2s}
+.toggle.on{background:#00ba7c}
+.toggle.on::after{left:22px}
+.toggle-label{font-size:13px;color:#e7e9ea}
+
+.item-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #2f3336}
+.item-row:last-child{border-bottom:none}
+.item-info{display:flex;flex-direction:column;gap:4px}
+.item-title{font-size:14px;font-weight:500}
+.item-desc{font-size:12px;color:#71767b}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🔗 QCE2ChatLab <span id="appVersion">v...</span> <span style="font-size:11px;font-weight:400;color:#888">— 本工具由若安独立开发 · 有问题反馈至邮箱 <a href="mailto:48650918@qq.com" style="color:#1d9bf0;text-decoration:none">48650918@qq.com</a></span></h1>
+  <span style="flex:1"></span>
+  <span id="syncStatus" style="font-size:13px;color:#71767b">就绪</span></div>
+
+<div class="container">
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('sync')">📡 同步</div>
+    <div class="tab" onclick="switchTab('config')">⚙️ 设置</div>
+    <div class="tab" onclick="switchTab('browse')">🔍 浏览会话</div>
+    <div class="tab" onclick="switchTab('system')">💻 系统</div>
+    <div class="tab" onclick="switchTab('log')">📋 日志</div>
+    <div class="tab" onclick="switchTab('history')">📜 记录</div></div>
+
+  <!-- QQ 决策通知（非阻断式） -->
+  <div id="qqDialog" class="hidden" style="margin-bottom:16px;border:2px solid #f0c040;border-radius:12px;background:rgba(240,192,64,0.06);padding:16px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <span style="font-size:18px">❓</span>
+      <span style="font-size:15px;font-weight:600;color:#f0c040">检测到 QQ 正在运行</span></div>
+    <p style="color:#aaa;font-size:13px;line-height:1.5;margin-bottom:12px">
+      QCE 同步需要 QQ 重新登录。同步完成后会自动重启 QQ（需已勾选 QQ 自动登录）。
+    </p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-gold btn-sm" onclick="qqDecision('sync_now')">⚡ 立即同步</button>
+      <div style="display:flex;gap:4px;align-items:center">
+        <button class="btn btn-outline btn-sm" onclick="qqDelay()">⏰ 延时</button>
+        <input type="number" id="qqDelayMinutes" value="5" min="1" max="120" style="width:50px;padding:4px;background:#252550;border:1px solid #444;border-radius:6px;color:#e0e0e0;font-size:13px;text-align:center">
+        <span style="color:#888;font-size:12px">分钟</span></div>
+      <button class="btn btn-sm" onclick="qqDecision('cancel')" style="background:transparent;border:1px solid #444;color:#999;padding:4px 12px;border-radius:6px;cursor:pointer">❌ 取消</button></div></div>
+  <!-- /QQ 决策通知 -->
+
+  <!-- === 同步 === -->
+  <div id="tab-sync">
+    <div class="card">
+      <div class="flex-between mb-8">
+        <div class="card-title">📡 会话同步列表</div>
+        <button class="btn btn-primary" onclick="startSync()" id="btnSync">▶ 开始同步</button></div>
+      <div id="peerList" class="peer-list"><div class="empty">还没有添加会话 👇 去「设置」页添加</div></div></div>
+    <div id="syncProgress" class="hidden card" style="margin-top:16px">
+      <div class="card-title">⏳ 同步进度</div>
+      <div id="syncStatusText" style="margin:8px 0;font-size:14px;color:#aaa"></div>
+      <div id="syncDetailText" style="font-size:13px;color:#888"></div></div></div>
+
+  <!-- === 设置 === -->
+  <div id="tab-config" class="hidden">
+    <div class="card">
+      <div class="card-title">🔌 QCE API <span id="qceStatus" class="status-tag offline"><span class="status-dot err"></span>未测试</span></div>
+      <div class="row"><label>地址</label><input type="text" id="qceUrl" value="http://127.0.0.1:40653" onchange="autoSaveConfig()"></div>
+      <div class="row"><label>Token</label><input type="password" id="qceToken" placeholder="QCE WebUI 中的 Token" onchange="autoSaveConfig()"></div>
+      <div class="row"><label>导出目录</label><input type="text" id="qceExportDir" placeholder="留空使用默认 ~\.qq-chat-exporter\exports\" onchange="autoSaveConfig()"></div>
+      <div class="row mt-8"><label></label><button class="btn btn-secondary btn-sm" onclick="testConn('qce')">🔍 测试连接</button></div></div>
+
+    <div class="card">
+      <div class="card-title">🔌 ChatLab API <span id="chatlabStatus" class="status-tag offline"><span class="status-dot err"></span>未测试</span></div>
+      <div class="row"><label>地址</label><input type="text" id="chatlabUrl" value="http://127.0.0.1:3110" onchange="autoSaveConfig()"></div>
+      <div class="row"><label>Token</label><input type="password" id="chatlabToken" placeholder="ChatLab 设置中的 clb_xxx" onchange="autoSaveConfig()"></div>
+      <div class="row mt-8"><label></label><button class="btn btn-secondary btn-sm" onclick="testConn('chatlab')">🔍 测试连接</button></div></div>
+
+    <div class="card">
+      <div class="card-title">⏱ 同步设置</div>
+      <div class="row"><label>时间范围</label><input type="number" id="syncDays" value="7" min="1" max="365" style="width:70px;flex:none" onchange="autoSaveConfig()"><span class="text-sm">天</span></div>
+      <div class="row"><label>导出格式</label><select id="syncFormat" onchange="autoSaveConfig()"><option value="json">JSON</option><option value="html">HTML</option><option value="txt">TXT</option></select></div>
+
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid #2f3336">
+        <div class="flex-between mb-8"><span style="font-size:14px;font-weight:600">📝 文件名规则</span></div>
+        <div class="row"><label>前缀</label><input type="text" id="filePrefix" placeholder="留空则只用 用户名" style="max-width:200px" onchange="autoSaveConfig()"></div>
+        <div class="item-row">
+          <div class="item-info"><span class="item-title">包含日期</span></div>
+          <label class="toggle-wrap">
+            <div class="toggle" id="fileIncDateToggle"></div>
+            <input type="checkbox" id="fileIncDate" style="display:none" onchange="updateFileToggles()">
+          </label></div>
+        <div class="item-row">
+          <div class="item-info"><span class="item-title">包含序号</span><span class="item-desc">每人独立计数，按导出顺序递增</span></div>
+          <label class="toggle-wrap">
+            <div class="toggle" id="fileIncSeqToggle"></div>
+            <input type="checkbox" id="fileIncSeq" style="display:none" onchange="updateFileToggles()">
+          </label></div>
+        <div class="row mt-8"><label>预览</label><span class="text-sm" id="filePreview" style="color:#1d9bf0">QQ昵称_2026-07-08_001.json</span></div></div>
+
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid #2f3336">
+        <div class="flex-between mb-8"><span style="font-size:14px;font-weight:600">🖼 媒体资源</span></div>
+        <div class="item-row">
+          <div class="item-info"><span class="item-title">导出媒体（图片/视频/语音/头像）</span><span class="item-desc">QCE 导出时下载所有媒体文件</span></div>
+          <label class="toggle-wrap">
+            <div class="toggle" id="exportMediaToggle"></div>
+            <input type="checkbox" id="exportMedia" checked style="display:none" onchange="updateFileToggles()">
+          </label></div></div></div>
+
+    <div class="card">
+      <div class="card-title">👥 会话管理</div>
+      <div id="syncPeersList"></div>
+      <div style="border-top:1px solid #2f3336;padding-top:16px;margin-top:12px">
+        <div class="card-title">+ 添加会话</div>
+        <div class="row"><label>QQ号</label><input type="text" id="peerUid" placeholder="QQ号或群号"><select id="peerType"><option value="friend">好友</option><option value="group">群聊</option></select><input type="text" id="peerName" placeholder="名称(可选)" style="max-width:160px"></div>
+        <div class="row mt-8"><label></label><button class="btn btn-primary btn-sm" onclick="addPeer()">添加</button><span class="text-sm">也可以去「🔍 浏览会话」从 QCE 直接选择</span></div></div></div>
+
+    <div class="flex gap-8" style="justify-content:flex-end">
+      <span class="text-sm" style="color:#71767b;line-height:36px">⚡ 已开启自动保存</span></div></div>
+
+  <!-- === 浏览 === -->
+  <div id="tab-browse" class="hidden">
+    <div class="card">
+      <div class="card-title">🔍 从 QCE 浏览会话</div>
+      <div class="row"><button class="btn btn-primary btn-sm" onclick="loadFriends()">📋 加载好友</button><button class="btn btn-primary btn-sm" onclick="loadGroups()">👥 加载群聊</button></div>
+      <div class="mt-12">
+        <input type="text" id="browseSearch" placeholder="搜索..." oninput="filterBrowse()" style="width:100%;margin-bottom:12px">
+        <div id="browseList" class="peer-list" style="max-height:400px"></div>
+        <div class="mt-12 flex gap-8" style="justify-content:flex-end"><button class="btn btn-primary btn-sm" onclick="addSelectedPeers()">➕ 添加到同步列表</button></div></div></div></div>
+
+  <!-- === 系统 === -->
+  <div id="tab-system" class="hidden">
+    <div class="card">
+      <div class="card-title">⚡ 开机自启</div>
+      <div class="item-row">
+        <div class="item-info">
+          <span class="item-title">开机自动启动</span>
+          <span class="item-desc" id="autostartDesc">Windows 启动时自动运行（后台静默）</span></div>
+        <label class="toggle-wrap" onclick="toggleAutostart()">
+          <div class="toggle" id="autostartToggle"></div>
+          <span class="toggle-label" id="autostartLabel">关闭</span>
+        </label></div></div>
+
+    <div class="card">
+      <div class="card-title">⏰ 定时自动同步</div>
+      <div class="item-row">
+        <div class="item-info">
+          <span class="item-title">启用定时同步</span>
+          <span class="item-desc" id="scheduleDesc">按设定间隔自动执行同步</span></div>
+        <label class="toggle-wrap" onclick="toggleSchedule()">
+          <div class="toggle" id="scheduleToggle"></div>
+          <span class="toggle-label" id="scheduleLabel">关闭</span>
+        </label></div>
+      <div id="scheduleSettings" class="hidden mt-12">
+        <!-- 第一步：选择频率 -->
+        <div class="row" id="schedStep1">
+          <label>执行频率</label>
+          <select id="scheduleType" onchange="onScheduleTypeChange()" style="min-width:140px">
+            <option value="daily">📅 每天执行</option>
+            <option value="weekly">📆 每周执行</option>
+            <option value="monthly">🗓 每月执行</option>
+          </select></div>
+        <!-- 第二步：选择周几/几号 -->
+        <div class="row hidden" id="schedStep2Weekly">
+          <label>选择星期</label>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <label class="day-chk"><input type="radio" name="schedWeekday" class="sched-weekday" value="1" onchange="saveSchedule()"> 周一</label>
+            <label class="day-chk"><input type="radio" name="schedWeekday" class="sched-weekday" value="2" onchange="saveSchedule()"> 周二</label>
+            <label class="day-chk"><input type="radio" name="schedWeekday" class="sched-weekday" value="3" onchange="saveSchedule()"> 周三</label>
+            <label class="day-chk"><input type="radio" name="schedWeekday" class="sched-weekday" value="4" onchange="saveSchedule()"> 周四</label>
+            <label class="day-chk"><input type="radio" name="schedWeekday" class="sched-weekday" value="5" onchange="saveSchedule()"> 周五</label>
+            <label class="day-chk"><input type="radio" name="schedWeekday" class="sched-weekday" value="6" onchange="saveSchedule()"> 周六</label>
+            <label class="day-chk"><input type="radio" name="schedWeekday" class="sched-weekday" value="7" onchange="saveSchedule()"> 周日</label></div></div>
+        <div class="row hidden" id="schedStep2Monthly">
+          <label>选择日期</label>
+          <select id="scheduleDay" onchange="saveSchedule()" style="min-width:100px">
+            
+<script>for(let d=1;d<=28;d++)document.write('<option value="'+d+'">'+d+'号</option>');</script>
+          </select>
+          <span class="text-sm">如所选日超过当月天数则执行最后一天</span>
+        </div>
+        <!-- 第三步：选择时间 -->
+        <div class="row" id="schedStep3">
+          <label>执行时间</label>
+          <div style="display:flex;gap:8px;align-items:center">
+          <select id="scheduleHour" onchange="saveSchedule()" style="min-width:90px">
+            <script>for(let h=0;h<24;h++)document.write('<option value="'+h+'">'+String(h).padStart(2,'0')+' :</option>');</script>
+          </select>
+          <select id="scheduleMinute" onchange="saveSchedule()" style="min-width:90px">
+            <script>for(let m=0;m<60;m+=5)document.write('<option value="'+m+'">'+String(m).padStart(2,'0')+'</option>');</script>
+          </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🚀 服务自启动</div>
+      <div class="item-desc" style="margin-bottom:8px">定时同步前自动检测并启动以下服务（留空则不启动）</div>
+      <div class="row"><label>QCE 启动脚本</label><input type="text" id="qceStartupScript" placeholder="例如 D:\QCE\start.bat" onchange="saveAutoStartScripts()" style="flex:1"></div>
+      <div class="row"><label>QCE 端口</label><input type="number" id="qceStartupPort" value="40653" min="1" max="65535" onchange="saveAutoStartScripts()" style="width:100px"></div>
+      <div class="row mt-8"><label>ChatLab 启动脚本</label><input type="text" id="chatlabStartupScript" placeholder="例如 D:\ChatLab\start.bat" onchange="saveAutoStartScripts()" style="flex:1"></div>
+      <div class="row"><label>ChatLab 端口</label><input type="number" id="chatlabStartupPort" value="3110" min="1" max="65535" onchange="saveAutoStartScripts()" style="width:100px"></div>
+      <div class="row mt-12" style="border-top:1px solid #2f3336;padding-top:12px"><label>QQ 启动脚本</label><input type="text" id="qqStartupScript" placeholder="例如 C:\Program Files (x86)\Tencent\QQ\Bin\QQ.exe" onchange="saveAutoStartScripts()" style="flex:1"></div>
+      <div class="item-desc" style="font-size:12px;color:#888;margin-top:4px">同步时检测到 QQ 运行会询问用户是否终止。同步完成后自动重启 QQ。需在 QQ 登录页勾选「自动登录」</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📁 安装位置</div>
+      <div class="row"><label>当前路径</label><input type="text" id="installDirPath" readonly style="flex:1"></div>
+      <div class="row mt-8">
+        <label></label>
+        <button class="btn btn-secondary btn-sm" onclick="setInstallDir('')" id="btnSetDefault">📁 使用默认位置</button>
+        <button class="btn btn-secondary btn-sm" onclick="pickInstallDir()">🔍 选择文件夹</button>
+      </div>
+      <div class="row mt-8"><label></label><span class="text-sm" id="installDirHint"></span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🖱 桌面快捷方式</div>
+      <div class="item-row">
+        <div class="item-info">
+          <span class="item-title">创建快捷方式</span>
+          <span class="item-desc">在桌面创建「一键启动」和「后台启动」快捷方式</span>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="createShortcuts()" id="btnCreateSc">🖱 创建</button>
+      </div>
+      <div id="shortcutResult" class="hidden mt-8" style="font-size:13px;color:#4caf50"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🔄 软件更新</div>
+      <div class="item-row">
+        <div class="item-info">
+          <span class="item-title" id="updateVersion">当前版本: -</span>
+          <span class="item-desc" id="updateDesc">点击检查更新</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="checkUpdate()" id="btnCheckUpdate">🔍 检查正式版更新</button>
+          <button class="btn btn-primary btn-sm hidden" onclick="installUpdate()" id="btnInstallUpdate">⬇ 安装更新</button>
+        </div>
+      </div>
+      <div class="item-row">
+        <div class="item-info">
+          <span class="item-title" style="color:#f0c040">🧪 开发版</span>
+          <span class="item-desc" style="color:#888">开发版为正在开发版本，因 bug 等原因暂时未同步至正式版，请不要下载。</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="checkDevUpdate()" id="btnCheckDevUpdate">🧪 检查开发版更新</button>
+          <button class="btn btn-primary btn-sm hidden" onclick="installDevUpdate()" id="btnInstallDevUpdate">⬇ 安装开发版</button>
+        </div>
+      </div>
+      <div id="updateDevLog" class="hidden mt-8" style="font-size:12px;color:#888"></div>
+      <div id="updateLog" class="hidden mt-8" style="font-size:12px;color:#71767b"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📋 版本日志</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="btn btn-sm" id="changelogStable" onclick="loadChangelog('stable')" style="background:#f0c040;color:#1a1a2e;border:none;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">正式版</button>
+        <button class="btn btn-sm" id="changelogDev" onclick="loadChangelog('dev')" style="background:rgba(255,255,255,0.05);color:#999;border:1px solid #444;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px">开发版</button>
+      </div>
+      <div id="changelogBox" style="font-size:12px;color:#999;line-height:1.8;max-height:400px;overflow-y:auto;padding:8px;background:rgba(0,0,0,0.1);border-radius:8px"><div class="empty">点击上方按钮查看版本日志</div></div>
+    </div>
+
+    <div class="card" style="border-color:#f4212e">
+      <div class="card-title" style="color:#f4212e">🗑 卸载软件</div>
+      <div class="item-row">
+        <div class="item-info">
+          <span class="item-title">一键卸载</span>
+          <span class="item-desc" style="color:#f0c040">⚠ 删除程序文件，保留聊天记录和配置</span>
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="uninstall()">🗑 卸载</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- === 日志 === -->
+  <div id="tab-log" class="hidden">
+    <div class="card">
+      <div class="flex-between mb-8">
+        <div class="card-title">📋 同步日志</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="diagnoseLog()">🔍 诊断</button>
+          <button class="btn btn-secondary btn-sm" onclick="loadLog()">🔄 刷新</button>
+        </div>
+      </div>
+      <div class="log-box" id="logBox"><div class="empty">暂无日志</div></div>
+      <div id="logDiagnose" class="mt-8 hidden" style="font-size:12px;color:#888;background:rgba(0,0,0,0.1);border-radius:8px;padding:12px"></div>
+    </div>
+  </div>
+
+  <!-- === 记录 === -->
+  <div id="tab-history" class="hidden">
+    <div class="card">
+      <div class="flex-between mb-8">
+        <div class="card-title">📜 同步记录</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span id="histSelectedCount" class="text-sm hidden" style="color:#1d9bf0"></span>
+          <button class="btn btn-danger btn-sm hidden" id="btnBatchDelete" onclick="batchDeleteHistory()">🗑 删除选中</button>
+          <button class="btn btn-secondary btn-sm" onclick="loadHistory()">🔄 刷新</button>
+          <button class="btn btn-danger btn-sm" onclick="clearHistory()">🗑 清空全部</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="btn btn-sm" id="histFilterAll" onclick="setHistFilter('')" style="background:#f0c040;color:#1a1a2e;border:none;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">📋 全部</button>
+        <button class="btn btn-sm" id="histFilterManual" onclick="setHistFilter('manual')" style="background:rgba(255,255,255,0.05);color:#999;border:1px solid #444;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px">👆 手动</button>
+        <button class="btn btn-sm" id="histFilterAuto" onclick="setHistFilter('auto')" style="background:rgba(255,255,255,0.05);color:#999;border:1px solid #444;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px">⏰ 自动</button>
+      </div>
+      <div id="historyList"><div class="empty">暂无同步记录</div></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// QCE2ChatLab - Copyright (c) 2026 Ruoan · 非商用 NC-BY-SA · 禁止商用 强制署名
+const COPYRIGHT = "QCE2ChatLab (c) 2026 Ruoan / NC-BY-SA";
+let config = {};
+let friendsList = [], groupsList = [], selectedPeers = new Set();
+
+function switchTab(name){
+  ['sync','config','browse','system','log','history'].forEach((t,i)=>{
+    document.querySelectorAll('.tabs')[0].querySelectorAll('.tab')[i].classList.toggle('active',t===name);
+    document.getElementById('tab-'+t).classList.toggle('hidden',t!==name);
+  });
+  if(name==='config')loadConfig();
+  if(name==='browse'){loadFriends();loadGroups();}
+  if(name==='system')loadSystemInfo();
+  if(name==='log')loadLog();
+  if(name==='history')loadHistory();
+}
+
+// ===== 配置 =====
+async function loadConfig(){
+  try{
+    const r=await fetch('/api/config');config=await r.json();
+    document.getElementById('qceUrl').value=config.qce?.base_url||'http://127.0.0.1:40653';
+    document.getElementById('qceToken').value=config.qce?.token||'';
+    document.getElementById('qceExportDir').value=config.qce?.export_dir||'';
+    document.getElementById('chatlabUrl').value=config.chatlab?.base_url||'http://127.0.0.1:3110';
+    document.getElementById('chatlabToken').value=config.chatlab?.token||'';
+    document.getElementById('syncDays').value=config.sync?.time_range_days||7;
+    document.getElementById('syncFormat').value=config.sync?.format||'json';
+    document.getElementById('filePrefix').value=config.sync?.file_prefix||'';
+    document.getElementById('fileIncDate').checked=config.sync?.file_include_date!==false;
+    document.getElementById('fileIncSeq').checked=config.sync?.file_include_seq!==false;
+    document.getElementById('exportMedia').checked=config.sync?.export_media!==false;
+    // 定时设置
+    document.getElementById('scheduleType').value=config.sync?.schedule_type||'daily';
+    const weekdays=config.sync?.schedule_weekdays||[1];
+    document.querySelectorAll('.sched-weekday').forEach(cb=>{cb.checked=weekdays.includes(parseInt(cb.value))});
+    document.getElementById('scheduleDay').value=config.sync?.schedule_day||1;
+    document.getElementById('scheduleHour').value=config.sync?.schedule_hour||0;
+    document.getElementById('scheduleMinute').value=config.sync?.schedule_minute!=null?config.sync.schedule_minute:0;
+    onScheduleTypeChange();
+    updateFileToggles();
+    renderSyncPeers();
+    updateToggles();
+  }catch(e){console.error(e)}
+}
+
+async function autoSaveConfig(){
+  await saveConfig(true);
+}
+
+async function saveConfig(silent){
+  config.qce=config.qce||{}; config.chatlab=config.chatlab||{}; config.sync=config.sync||{}; config.app=config.app||{};
+  config.qce.base_url=document.getElementById('qceUrl').value;
+  config.qce.token=document.getElementById('qceToken').value;
+  config.qce.export_dir=document.getElementById('qceExportDir').value;
+  config.chatlab.base_url=document.getElementById('chatlabUrl').value;
+  config.chatlab.token=document.getElementById('chatlabToken').value;
+  config.sync.time_range_days=parseInt(document.getElementById('syncDays').value)||7;
+  config.sync.format=document.getElementById('syncFormat').value;
+  config.sync.file_prefix=document.getElementById('filePrefix').value;
+  config.sync.file_include_date=document.getElementById('fileIncDate').checked;
+  config.sync.file_include_seq=document.getElementById('fileIncSeq').checked;
+  config.sync.export_media=document.getElementById('exportMedia').checked;
+  // 定时设置
+  config.sync.schedule_type=document.getElementById('scheduleType').value;
+  const checkedDays=[];document.querySelectorAll('.sched-weekday').forEach(cb=>{if(cb.checked)checkedDays.push(parseInt(cb.value))});
+  config.sync.schedule_weekdays=checkedDays.length>0?checkedDays:[1];
+  config.sync.schedule_day=parseInt(document.getElementById('scheduleDay').value)||1;
+  config.sync.schedule_hour=parseInt(document.getElementById('scheduleHour').value)||0;
+  config.sync.schedule_minute=parseInt(document.getElementById('scheduleMinute').value)||0;
+  try{
+    await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({config})});
+    if(!silent)alert('已保存');
+    updateToggles();
+  }catch(e){if(!silent)alert('保存失败: '+e)}
+}
+
+// ===== 开关 =====
+function updateToggles(){
+  const at=document.getElementById('autostartToggle'),al=document.getElementById('autostartLabel');
+  const on=config.app?.autostart||false;
+  at.className='toggle'+(on?' on':''); al.textContent=on?'已开启':'关闭';
+
+  const st=document.getElementById('scheduleToggle'),sl=document.getElementById('scheduleLabel');
+  const so=config.sync?.auto_sync_enabled||false;
+  st.className='toggle'+(so?' on':''); sl.textContent=so?'已开启':'关闭';
+  document.getElementById('scheduleSettings').classList.toggle('hidden',!so);
+  if(so)onScheduleTypeChange();
+}
+
+async function toggleAutostart(){
+  config.app.autostart=!config.app.autostart;
+  await saveConfig(true);
+}
+
+function updateFileToggles(){
+  ['fileIncDate','fileIncSeq','exportMedia'].forEach(id=>{
+    const cb=document.getElementById(id);
+    const tg=document.getElementById(id+'Toggle');
+    if(tg)tg.className='toggle'+(cb.checked?' on':'');
+  });
+  // 预览
+  const prefix=document.getElementById('filePrefix').value.trim()||'QQ昵称';
+  const date=document.getElementById('fileIncDate').checked?'_2026-07-08':'';
+  const seq=document.getElementById('fileIncSeq').checked?'_001':'';
+  document.getElementById('filePreview').textContent=prefix+date+seq+'.json';
+  autoSaveConfig();
+}
+
+function onScheduleTypeChange(){
+  const type=document.getElementById('scheduleType').value;
+  document.getElementById('schedStep2Weekly').classList.toggle('hidden',type!=='weekly');
+  document.getElementById('schedStep2Monthly').classList.toggle('hidden',type!=='monthly');
+}
+
+async function saveSchedule(){
+  config.sync.schedule_type=document.getElementById('scheduleType').value;
+  const checkedDays=[];document.querySelectorAll('.sched-weekday').forEach(cb=>{if(cb.checked)checkedDays.push(parseInt(cb.value))});
+  config.sync.schedule_weekdays=checkedDays.length>0?checkedDays:[1];
+  config.sync.schedule_day=parseInt(document.getElementById('scheduleDay').value)||1;
+  config.sync.schedule_hour=parseInt(document.getElementById('scheduleHour').value)||0;
+  config.sync.schedule_minute=parseInt(document.getElementById('scheduleMinute').value)||0;
+  try{
+    await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({config})});
+  }catch(e){}
+}
+
+async function saveAutoStartScripts(){
+  config.qce=config.qce||{};
+  config.chatlab=config.chatlab||{};
+  config.qce.startup_script=document.getElementById('qceStartupScript').value.trim();
+  config.qce.startup_port=parseInt(document.getElementById('qceStartupPort').value)||40653;
+  config.chatlab.startup_script=document.getElementById('chatlabStartupScript').value.trim();
+  config.chatlab.startup_port=parseInt(document.getElementById('chatlabStartupPort').value)||3110;
+  config.qce.qq_startup_script=document.getElementById('qqStartupScript').value.trim();
+  try{
+    const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({config})});
+    const d=await r.json();
+    if(!d.ok)console.warn('保存失败:',d);
+  }catch(e){console.warn('保存失败:',e)}
+}
+
+async function toggleSchedule(){
+  config.sync.auto_sync_enabled=!config.sync.auto_sync_enabled;
+  document.getElementById('scheduleSettings').classList.toggle('hidden',!config.sync.auto_sync_enabled);
+  if(config.sync.auto_sync_enabled)onScheduleTypeChange();
+  await saveConfig(true);
+}
+
+// ===== 同步历史记录 =====
+let _histSelected = new Set();
+let _histData = [];
+let _histFilter = '';
+
+function updateBatchDeleteBtn(){
+  const cnt = _histSelected.size;
+  document.getElementById('btnBatchDelete').classList.toggle('hidden', cnt === 0);
+  document.getElementById('histSelectedCount').classList.toggle('hidden', cnt === 0);
+  document.getElementById('histSelectedCount').textContent = cnt > 0 ? `已选 ${cnt} 条` : '';
+}
+
+async function loadHistory(){
+  try{
+    const src=_histFilter?`&source=${_histFilter}`:'';
+    const r=await fetch('/api/sync/history?limit=100'+src);const d=await r.json();
+    _histData = d.history||[];
+    _histSelected.clear();
+    updateBatchDeleteBtn();
+    const el=document.getElementById('historyList');
+    if(_histData.length===0){el.innerHTML='<div class="empty">暂无同步记录</div>';return}
+    el.innerHTML=_histData.map((h,i)=>{
+      // 支持新旧两种格式
+      const isSession = h.session_id && h.peer_results;
+      const ts = h.time;
+      const timeDesc=h.time_str+' '+h.weekday;
+      const ok=!h.failed_count||h.failed_count===0;
+      const sourceBadge = h.source==='auto'
+        ? '<span class="product-badge badge-xuefeng" style="font-size:11px">⏰ 定时</span>'
+        : '<span class="product-badge badge-career" style="font-size:11px">👆 手动</span>';
+
+      if(isSession){
+        // 新格式：会话级汇总
+        const peerHtml = (h.peer_results||[]).map(p =>
+          `<span style="font-size:13px;margin-right:8px">${p.status==='成功'?'✅':'❌'} ${p.name}${p.error?'<span style="color:#f4212e;font-size:12px;margin-left:4px">'+p.error+'</span>':''}</span>`
+        ).join('');
+        return `<div class="hist-card" style="padding:10px 0">
+          <div class="hist-card-inner">
+            <div class="hist-top">
+              <strong style="color:#e0e0e0;font-size:14px">${sourceBadge} ${ok?'✅ 成功':'⚠ 部分失败'}</strong>
+              <span style="font-size:12px;color:#888">${h.success_count||'?'}成功 / ${h.failed_count||'0'}失败</span>
+            </div>
+            <div class="hist-detail" style="margin-top:4px">
+              <span class="icon">⏰</span><span>${timeDesc}</span>
+              <span class="icon">📅</span><span>${h.time_range||'?'}</span>
+              ${h.messages?'<span class="icon">📨</span><span>'+h.messages+'条</span>':''}
+              <span class="hist-duration">⏱ ${h.duration_display||h.duration_seconds+'秒'}</span>
+            </div>
+            <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${peerHtml}</div>
+            ${h.failed_count>0?`<button class="btn btn-sm" onclick="retrySync('${h.session_id}')" style="margin-top:8px;background:#f0c040;color:#1a1a2e;border:none;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">🔄 重新同步失败的 ${h.failed_count} 个会话</button>`:''}
+          </div>
+        </div>`;
+      } else {
+        // 旧格式：单条记录
+        const peerName=h.peer||'?';
+        const statusOk=h.status==='成功';
+        return `<div class="hist-card" style="padding:10px 0">
+          <div class="hist-card-inner">
+            <div class="hist-top">
+              <span style="color:#e0e0e0;font-size:14px">👤 ${peerName}</span>
+              <span class="hist-status badge ${statusOk?'badge-ok':'badge-fail'}">${statusOk?'✅ 成功':'❌ 失败'}</span>
+            </div>
+            <div class="hist-detail">
+              <span class="icon">⏰</span><span>${timeDesc}</span>
+              <span class="icon">📅</span><span>${h.time_range||'?'}</span>
+              ${h.messages?'<span class="icon">📨</span><span>'+h.messages+'条</span>':''}
+              <span class="hist-duration">⏱ ${h.duration_display||h.duration_seconds+'秒'}</span>
+              ${!statusOk&&h.error?'<span style="color:#f4212e;font-size:12px">'+h.error+'</span>':''}
+            </div>
+          </div>
+        </div>`;
+      }
+    }).join('');
+  }catch(e){
+    document.getElementById('historyList').innerHTML='<div class="empty">加载失败: '+e+'</div>';
+  }
+}
+
+async function retrySync(sessionId){
+  if(!confirm('重新同步该次记录中失败的会话？'))return;
+  try{
+    const r=await fetch('/api/sync/retry',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:sessionId})});
+    const d=await r.json();
+    if(d.ok){
+      alert(d.message);
+      switchTab('sync');
+    }else{
+      alert(d.error);
+    }
+  }catch(e){alert('重试失败: '+e)}
+}
+
+function setHistFilter(source){
+  _histFilter = source;
+  // 更新按钮样式
+  ['histFilterAll','histFilterManual','histFilterAuto'].forEach(id=>{
+    const btn=document.getElementById(id);
+    const active = (id==='histFilterAll' && !source) || (id==='histFilterManual' && source==='manual') || (id==='histFilterAuto' && source==='auto');
+    if(active){
+      btn.style.background='#f0c040';btn.style.color='#1a1a2e';btn.style.fontWeight='600';
+    }else{
+      btn.style.background='rgba(255,255,255,0.05)';btn.style.color='#999';btn.style.fontWeight='400';
+    }
+  });
+  loadHistory();
+}
+
+function toggleHistSelect(cb){
+  const ts = parseInt(cb.dataset.ts);
+  if(cb.checked) _histSelected.add(ts);
+  else _histSelected.delete(ts);
+  updateBatchDeleteBtn();
+}
+
+async function batchDeleteHistory(){
+  if(_histSelected.size === 0) return;
+  if(!confirm(`确定删除选中的 ${_histSelected.size} 条同步记录？`)) return;
+  try{
+    const r=await fetch('/api/sync/history/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({timestamps:[..._histSelected]})});
+    const d=await r.json();
+    if(d.ok) loadHistory();
+    else alert('删除失败');
+  }catch(e){alert('删除失败: '+e)}
+}
+
+async function clearHistory(){
+  if(!confirm('确定清空所有同步记录？此操作不可恢复。'))return;
+  try{
+    await fetch('/api/sync/history/clear',{method:'POST'});
+    loadHistory();
+  }catch(e){alert('清空失败: '+e)}
+}
+
+// ===== 系统 =====
+async function loadSystemInfo(){
+  try{
+    // 安装目录
+    const ir=await fetch('/api/install-dir'); const id=await ir.json();
+    document.getElementById('installDirPath').value=id.current;
+    document.getElementById('installDirHint').textContent=id.is_frozen?'':'默认位置: '+id.default;
+    // 定时设置
+    const cr=await fetch('/api/config'); const c=await cr.json();
+    document.getElementById('scheduleType').value=c.sync?.schedule_type||'daily';
+    (c.sync?.schedule_weekdays||[1]).forEach(w=>{
+      document.querySelectorAll('.sched-weekday').forEach(cb=>{if(parseInt(cb.value)===w)cb.checked=true});
+    });
+    document.getElementById('scheduleDay').value=c.sync?.schedule_day||1;
+    document.getElementById('scheduleHour').value=c.sync?.schedule_hour||0;
+    document.getElementById('scheduleMinute').value=c.sync?.schedule_minute!=null?c.sync.schedule_minute:0;
+    // 服务自启动设置
+    document.getElementById('qceStartupScript').value=c.qce?.startup_script||'';
+    document.getElementById('qceStartupPort').value=c.qce?.startup_port||40653;
+    document.getElementById('chatlabStartupScript').value=c.chatlab?.startup_script||'';
+    document.getElementById('chatlabStartupPort').value=c.chatlab?.startup_port||3110;
+    document.getElementById('qqStartupScript').value=c.qce?.qq_startup_script||'';
+    // 同步到全局 config 并更新开关状态
+    config=c;
+    updateToggles();
+  }catch(e){}
+}
+
+async function setInstallDir(path){
+  try{
+    const r=await fetch('/api/install-dir',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({path})});
+    if(r.ok){await loadSystemInfo();alert('已设置')}
+  }catch(e){alert('设置失败: '+e)}
+}
+
+function pickInstallDir(){
+  const path=prompt('请输入或粘贴文件夹路径：\n（例如：C:\\Tools\\QCE2ChatLab）',document.getElementById('installDirPath').value);
+  if(path)setInstallDir(path.trim());
+}
+
+// ===== 连接测试 =====
+async function testConn(svc){
+  const btn=event.target; btn.textContent='测试中...'; btn.disabled=true;
+  await saveConfig(true);
+  try{
+    const r=await fetch('/api/test-connection',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({service:svc})});
+    const d=await r.json();
+    const el=document.getElementById(svc+'Status');
+    if(d.ok){el.innerHTML='<span class="status-dot ok"></span>已连接';el.className='status-tag online'}
+    else{el.innerHTML='<span class="status-dot err"></span>'+(d.detail||'失败');el.className='status-tag offline'}
+  }catch(e){
+    const el=document.getElementById(svc+'Status');
+    el.innerHTML='<span class="status-dot err"></span>'+e.message;el.className='status-tag offline';
+  }
+  btn.textContent='🔍 测试连接';btn.disabled=false;
+}
+
+// ===== 会话管理 =====
+function addPeer(){
+  const uid=document.getElementById('peerUid').value.trim(),name=document.getElementById('peerName').value.trim(),type=document.getElementById('peerType').value;
+  if(!uid){alert('请输入QQ号');return}
+  config.sync.peers=config.sync.peers||[];
+  if(config.sync.peers.find(p=>p.uid===uid)){alert('已在列表中');return}
+  config.sync.peers.push({uid,name:name||uid,type});
+  document.getElementById('peerUid').value='';document.getElementById('peerName').value='';
+  renderSyncPeers();saveConfig(true);
+}
+
+function removePeer(uid){
+  if(!confirm('确定移除？'))return;
+  config.sync.peers=(config.sync.peers||[]).filter(p=>p.uid!==uid);
+  renderSyncPeers();saveConfig(true);
+}
+
+function renderSyncPeers(){
+  const peers=config.sync?.peers||[];
+  const html=peers.length===0?'<div class="empty">还没有添加会话</div>'
+    :peers.map(p=>`<div class="peer-item"><div style="display:flex;align-items:center;gap:10px"><span class="badge ${p.type==='group'?'badge-group':'badge-friend'}">${p.type==='group'?'群聊':'好友'}</span><span class="peer-name">${p.name}</span><span class="peer-meta">${p.uid}</span></div><button class="btn btn-danger btn-sm" onclick="removePeer('${p.uid}')">移除</button></div>`).join('');
+  document.getElementById('syncPeersList').innerHTML=html;
+  document.getElementById('peerList').innerHTML=peers.length===0?'<div class="empty">还没有添加会话 👇 去「设置」页添加</div>':html;
+}
+
+// ===== 浏览 QCE =====
+async function loadFriends(){
+  try{const r=await fetch('/api/qce/friends');const d=await r.json();friendsList=d.success&&d.data?(d.data.friends||d.data||[]):[];renderBrowse()}catch(e){alert('加载失败: '+e)}
+}
+async function loadGroups(){
+  try{const r=await fetch('/api/qce/groups');const d=await r.json();groupsList=d.success&&d.data?(d.data.groups||d.data||[]):[];renderBrowse()}catch(e){alert('加载失败: '+e)}
+}
+
+function renderBrowse(){
+  const q=document.getElementById('browseSearch').value.toLowerCase();
+  const existingUids=new Set((config.sync?.peers||[]).map(p=>p.uid));
+  const items=[...friendsList.map(i=>({id:i.uin||i.uid||'',name:i.nick||i.name||'',type:'friend'}))
+    ,...groupsList.map(i=>({id:i.groupCode||i.uid||'',name:i.groupName||i.name||'',type:'group'}))];
+
+  const filtered=items.filter(i=>(i.name||'').toLowerCase().includes(q)||(i.id||'').toLowerCase().includes(q));
+  document.getElementById('browseList').innerHTML=filtered.length===0?'<div class="empty">无结果</div>'
+    :filtered.map(i=>{
+      const sel=selectedPeers.has(i.id+'|'+i.type);
+      return `<div class="peer-item${sel?' style=\"border-color:#1d9bf0\"':''}" onclick="toggleSelect('${i.id}','${i.type}','${i.name}')">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="badge ${i.type==='group'?'badge-group':'badge-friend'}">${i.type==='group'?'群聊':'好友'}</span>
+          <span>${i.name||i.id}</span><span class="peer-meta">${i.id}</span>
+          ${existingUids.has(i.id)?'<span class="badge badge-friend">已添加</span>':''}
+          ${sel?'<span style="color:#1d9bf0;font-size:12px">已选</span>':''}
+        </div></div>`;
+    }).join('');
+}
+
+function toggleSelect(id,type,name){const k=id+'|'+type;selectedPeers.has(k)?selectedPeers.delete(k):selectedPeers.add(k);renderBrowse()}
+function filterBrowse(){renderBrowse()}
+
+function addSelectedPeers(){
+  if(selectedPeers.size===0){alert('请先选择会话');return}
+  config.sync.peers=config.sync.peers||[];
+  const existing=new Set(config.sync.peers.map(p=>p.uid));
+  let added=0;
+  selectedPeers.forEach(k=>{const[id,type]=k.split('|');if(!existing.has(id)){config.sync.peers.push({uid:id,name:id,type});added++}});
+  selectedPeers.clear();
+  saveConfig(true).then(()=>{renderSyncPeers();renderBrowse();alert('已添加 '+added+' 个会话')});
+}
+
+// ===== 同步 =====
+async function startSync(){
+  if((config.sync?.peers||[]).length===0){alert('请先添加会话');return}
+  document.getElementById('btnSync').disabled=true;document.getElementById('btnSync').textContent='⏳ 启动中...';
+  document.getElementById('syncProgress').classList.remove('hidden');
+  document.getElementById('syncStatusText').textContent='正在启动...';
+  document.getElementById('syncDetailText').textContent='';
+  try{await fetch('/api/sync/start',{method:'POST'});pollProgress()}catch(e){alert('启动失败: '+e)}
+}
+
+async function qqDecision(action){
+  const minutes=parseInt(document.getElementById('qqDelayMinutes').value)||5;
+  document.getElementById('qqDialog').classList.add('hidden');
+  try{
+    await fetch('/api/sync/qq-choice',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action,delay_minutes:action==='delay'?minutes:5})});
+    if(action==='cancel'){
+      document.getElementById('btnSync').disabled=false;
+      document.getElementById('btnSync').textContent='▶ 开始同步';
+      document.getElementById('syncProgress').classList.add('hidden');
+    }
+  }catch(e){}
+}
+
+function qqDelay(){
+  qqDecision('delay');
+}
+
+function pollProgress(){
+  if(window._polling)return;window._polling=true;
+  const iv=setInterval(async()=>{
+    try{
+      const r=await fetch('/api/sync/progress');const p=await r.json();
+      const st=document.getElementById('syncStatusText');
+      const dt=document.getElementById('syncDetailText');
+
+      if(p.status==='awaiting_qq'){
+        st.textContent='❓ 检测到 QQ 正在运行';
+        dt.textContent='请选择处理方式...';
+        document.getElementById('qqDialog').classList.remove('hidden');
+        return;
+      }
+
+      if(p.status==='delayed'){
+        st.textContent='⏰ '+p.detail;
+        dt.textContent='';
+        return;
+      }
+
+      if(p.status==='running'||p.status==='starting'){
+        st.textContent='⏳ 同步中'+(p.current?' · '+p.current:'')+(p.detail?' · '+p.detail:'');
+        dt.textContent=p.detail||'';
+        return;
+      }
+
+      if(p.status==='idle'){
+        clearInterval(iv);window._polling=false;
+        document.getElementById('btnSync').disabled=false;
+        document.getElementById('btnSync').textContent='▶ 开始同步';
+        document.getElementById('syncProgress').classList.add('hidden');
+        loadLog();
+        // 同步完成后检测更新
+        try{
+          const ur=await fetch('/api/update/check');const ud=await ur.json();
+          if(ud.has_update&&ud.current!==ud.latest){
+            if(confirm('发现新版本 '+ud.latest+'，是否立即安装？')){
+              window.open('about:blank','_self');installUpdate();
+            }
+          }
+        }catch(e){}
+        return;
+      }
+    }catch(e){clearInterval(iv);window._polling=false}
+  },2000);
+}
+
+// ===== 日志 =====
+async function diagnoseLog(){
+  const el=document.getElementById('logDiagnose');
+  el.classList.remove('hidden');
+  el.innerHTML='诊断中...';
+  try{
+    // 直接读文件内容（绕过前端API）
+    const r=await fetch('/api/diagnose');const d=await r.json();
+    // 也尝试直接读日志
+    const lr=await fetch('/api/sync/log?limit=5');const ld=await lr.json();
+    const lines=ld.log||[];
+    el.innerHTML='<div>📁 日志文件: '+d.log_file+'</div>'+
+      '<div>📏 文件大小: '+d.log_file_size+' 字节</div>'+
+      '<div>✅ 写入测试: '+(d.log_write_ok?'成功':'失败 '+(d.log_write_error||''))+'</div>'+
+      '<div>📋 读取行数: '+lines.length+' 条</div>'+
+      (lines.length>0?'<div>📝 最新日志:<br>'+lines.map(l=>'<span style="color:#aaa">'+l+'</span>').join('<br>')+'</div>':'')+
+      '<div style="margin-top:8px;font-size:11px;color:#666">如果文件有内容但读取为0条，请在Console输入: <code style="background:#333;padding:2px 6px;border-radius:4px">fetch("/api/diagnose").then(r=>r.json()).then(console.log)</code></div>';
+  }catch(e){
+    el.innerHTML='诊断失败: '+e;
+  }
+}
+
+async function loadLog(){
+  try{
+    const r=await fetch('/api/sync/log?limit=100');const d=await r.json();
+    const lines=d.log||[];const box=document.getElementById('logBox');
+    box.innerHTML=lines.length===0?'<div class="empty">暂无日志</div>'
+      :lines.map(l=>{let c='log-line';if(l.includes('❌'))c+=' error';if(l.includes('✅'))c+=' success';return `<div class="${c}">${l}</div>`}).join('');
+    box.scrollTop=box.scrollHeight;
+  }catch(e){}
+}
+
+// ===== 初始化 =====
+// ===== 更新 =====
+async function checkDevUpdate(){
+  const btn=document.getElementById('btnCheckDevUpdate');
+  btn.textContent='检查中...';btn.disabled=true;
+  const log=document.getElementById('updateDevLog');
+  log.classList.remove('hidden');log.textContent='正在检查开发版...';
+  try{
+    const r=await fetch('/api/update/dev-check');const d=await r.json();
+    if(d.error){
+      log.textContent='检查失败: '+d.error;
+    }else if(d.has_update){
+      log.textContent=`发现开发版新版本! 大小: ${d.remote_size_kb||'?'} KB`;
+      document.getElementById('btnInstallDevUpdate').classList.remove('hidden');
+    }else{
+      log.textContent='开发版已是最新版本';
+      document.getElementById('btnInstallDevUpdate').classList.add('hidden');
+    }
+  }catch(e){
+    log.textContent='检查失败: '+e;
+  }
+  btn.innerHTML='🧪 检查开发版更新';btn.disabled=false;
+}
+
+async function installDevUpdate(){
+  if(!confirm('确定安装开发版更新？软件会自动重启。\n\n⚠ 开发版可能存在未修复的 bug。'))return;
+  const btn=document.getElementById('btnInstallDevUpdate');
+  btn.textContent='下载中...';btn.disabled=true;
+  const log=document.getElementById('updateDevLog');
+  log.textContent='正在下载开发版...';
+  try{
+    const r=await fetch('/api/update/dev-install',{method:'POST'});
+    const d=await r.json();
+    if(d.ok){
+      log.textContent='开发版更新完成! 正在重启...';
+      setTimeout(()=>{location.reload()},5000);
+    }else{
+      log.textContent='安装失败: '+d.error;
+      btn.innerHTML='⬇ 安装开发版';btn.disabled=false;
+    }
+  }catch(e){
+    log.textContent='安装失败: '+e;
+    btn.innerHTML='⬇ 安装开发版';btn.disabled=false;
+  }
+}
+
+async function checkUpdate(){
+  const btn=document.getElementById('btnCheckUpdate');
+  btn.textContent='检查中...';btn.disabled=true;
+  document.getElementById('updateDesc').textContent='正在检查...';
+  try{
+    const r=await fetch('/api/update/check');const d=await r.json();
+    document.getElementById('updateVersion').textContent='当前版本: '+d.current;
+    if(d.error){
+      document.getElementById('updateDesc').textContent='检查失败: '+d.error;
+    }else if(d.has_update){
+      document.getElementById('updateDesc').textContent=`发现新版本! 更新时间: ${d.remote_mtime}  |  大小: ${d.remote_size_kb} KB`;
+      document.getElementById('btnInstallUpdate').classList.remove('hidden');
+    }else{
+      document.getElementById('updateDesc').textContent='已是最新版本';
+      document.getElementById('btnInstallUpdate').classList.add('hidden');
+    }
+  }catch(e){
+    document.getElementById('updateDesc').textContent='检查失败: '+e;
+  }
+  btn.textContent='🔍 检查更新';btn.disabled=false;
+}
+
+async function installUpdate(){
+  if(!confirm('确定安装更新？软件会自动重启。'))return;
+  const btn=document.getElementById('btnInstallUpdate');
+  btn.textContent='下载中...';btn.disabled=true;
+  document.getElementById('updateLog').classList.remove('hidden');
+  document.getElementById('updateLog').textContent='正在下载更新...';
+
+  try{
+    // 轮询状态
+    const poll=setInterval(async()=>{
+      try{
+        const r=await fetch('/api/update/status');const s=await r.json();
+        document.getElementById('updateLog').textContent=s.progress||'处理中...';
+        if(!s.downloading)clearInterval(poll);
+      }catch(e){}
+    },1000);
+
+    const r=await fetch('/api/update/install',{method:'POST'});
+    const d=await r.json();
+    if(d.ok){
+      document.getElementById('updateLog').textContent='更新完成! 正在重启... 请稍等片刻，页面会自动刷新。';
+      setTimeout(()=>{location.reload()},5000);
+    }else{
+      document.getElementById('updateLog').textContent='更新失败: '+(d.error||'未知错误');
+      btn.textContent='⬇ 安装更新';btn.disabled=false;
+    }
+  }catch(e){
+    document.getElementById('updateLog').textContent='更新请求失败: '+e;
+    btn.textContent='⬇ 安装更新';btn.disabled=false;
+  }
+}
+
+// ===== 版本日志 =====
+async function loadChangelog(type){
+  const box=document.getElementById('changelogBox');
+  box.innerHTML='加载中...';
+  ['changelogStable','changelogDev'].forEach(id=>{
+    const btn=document.getElementById(id);
+    const active=(id==='changelogStable' && type==='stable')||(id==='changelogDev' && type==='dev');
+    btn.style.background=active?'#f0c040':'rgba(255,255,255,0.05)';
+    btn.style.color=active?'#1a1a2e':'#999';
+    btn.style.fontWeight=active?'600':'400';
+  });
+  try{
+    const r=await fetch('/api/update/changelog');const d=await r.json();
+    if(!d.changelog){box.innerHTML='暂无版本日志';return}
+    // 简单解析 markdown：按版本分割
+    // 正式版只显示 v1.x，开发版显示 v1.x-dev 或带有特定标记的
+    const lines=d.changelog.split('\n');
+    let inTarget=false;
+    let html='';
+    let currentVer='';
+    for(const l of lines){
+      if(l.startsWith('## v')){
+        currentVer=l.slice(3).trim();
+        const isDev=currentVer.includes('dev')||currentVer.includes('测试');
+        inTarget=(type==='dev' && isDev)||(type==='stable' && !isDev);
+        if(inTarget)html+='<div style="margin:12px 0 8px;font-size:14px;font-weight:600;color:#e0e0e0">'+l+'</div>';
+      }else if(inTarget && l.startsWith('### ')){
+        html+='<div style="margin:6px 0 2px;font-size:13px;color:#f0c040">'+l+'</div>';
+      }else if(inTarget && l.startsWith('- ')){
+        html+='<div style="padding-left:12px;font-size:12px;color:#aaa">'+l+'</div>';
+      }else if(inTarget && l.trim()===''){
+        html+='';
+      }
+    }
+    box.innerHTML=html||'暂无版本日志';
+  }catch(e){
+    box.innerHTML='加载失败: '+e;
+  }
+}
+
+// ===== 卸载 =====
+async function createShortcuts(){
+  const btn=document.getElementById('btnCreateSc');
+  btn.disabled=true;btn.textContent='创建中...';
+  try{
+    const r=await fetch('/api/create-shortcuts',{method:'POST'});
+    const d=await r.json();
+    const el=document.getElementById('shortcutResult');
+    el.classList.remove('hidden');
+    if(d.ok){
+      el.innerHTML='✅ '+d.message;
+      el.style.color='#4caf50';
+    }else{
+      el.innerHTML='❌ '+d.error;
+      el.style.color='#f4212e';
+    }
+  }catch(e){
+    document.getElementById('shortcutResult').innerHTML='❌ 创建失败: '+e;
+  }
+  btn.disabled=false;btn.textContent='🖱 创建';
+}
+
+async function uninstall(){
+  if(!confirm('确定卸载 QCE2ChatLab？\n\n程序文件将被删除。\n聊天记录和配置保留在 C:\\Users\\你的用户名\\.qce2chatlab'))return;
+  if(!confirm('再次确认：卸载后需手动删除配置文件夹来彻底清理。'))return;
+  try{
+    const r=await fetch('/api/uninstall',{method:'POST'});
+    const d=await r.json();
+    if(d.ok){
+      alert('卸载完成！\n\n已删除文件: '+d.deleted.join(', ')+
+        '\n\n配置和聊天记录保留在: '+d.config_dir+
+        '\n要彻底清理请手动删除该目录。');
+    }else{
+      alert('卸载失败');
+    }
+  }catch(e){alert('卸载请求失败: '+e)}
+}
+
+async function init(){
+  // 加载版本号
+  try{const r=await fetch('/api/version');const d=await r.json();document.getElementById('appVersion').textContent='v'+d.version}catch(e){}
+  await loadConfig();
+  updateToggles();
+  loadLog();
+  // 启动时检查正式版更新，发现新版本提示用户
+  try{
+    const r=await fetch('/api/update/check');const d=await r.json();
+    document.getElementById('updateVersion').textContent='当前版本: '+d.current;
+    if(d.has_update&&d.current!==d.latest){
+      document.getElementById('btnInstallUpdate').classList.remove('hidden');
+    }
+  }catch(e){}
+  // 后台进度轮询（自动同步时也能收到 QQ 弹窗）
+  if(!window._bgProgressPoll){
+    window._bgProgressPoll=setInterval(async()=>{
+      try{
+        const r=await fetch('/api/sync/progress');const p=await r.json();
+        if(p.status==='awaiting_qq'){
+          document.getElementById('qqDialog').classList.remove('hidden');
+        }else if(p.status==='running'&&!window._polling){
+          document.getElementById('btnSync').disabled=true;document.getElementById('btnSync').textContent='同步中...';pollProgress();
+        }
+      }catch(e){}
+    },3000);
+  }
+}
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.py.class
+
+# 虚拟环境
+venv/
+.env/
+qce2chatlab-venv/
+
+# 本地配置（密钥/授权/数据库）
+*.key
+*.pem
+*.lic
+*.db
+*.db.cipher
+*.db-shm
+*.db-wal
+
+# 打包产物
+dist/
+build/
+*.exe
+*.spec
+
+# 操作系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 日志（用户本地）
+*.log
+
+# 临时文件
+tmp/
+temp/
