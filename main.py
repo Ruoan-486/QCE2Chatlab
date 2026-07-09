@@ -1,10 +1,8 @@
+#!/usr/bin/env python3
 # QCE2ChatLab - QQ聊天记录自动同步工具
 # Copyright (c) 2026 Ruoan
 # 许可证: 自定义非商用 NC-BY-SA 协议（详见 LICENSE）
 # 禁止商用 · 强制保留署名 · 衍生项目必须附带相同协议
-
-
-#!/usr/bin/env python3
 """
 QCE2ChatLab - QQ聊天记录自动同步工具
 从 QCE (QQ Chat Exporter) 自动导出并导入到 ChatLab
