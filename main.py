@@ -1848,25 +1848,17 @@ async def api_version():
     return {"version": VERSION}
 
 
-CURRENT_CHANGELOG = []  # 运行时缓存
-
-
 @app.get("/api/update/changelog")
 async def api_changelog():
-    """从服务器获取更新日志（正式版+开发版）"""
-    global CURRENT_CHANGELOG
-    if CURRENT_CHANGELOG:
-        return {"changelog": CURRENT_CHANGELOG}
+    """从门户获取更新日志（每次重新获取，不缓存）"""
     try:
         import httpx
-        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as c:
+        async with httpx.AsyncClient(timeout=10) as c:
             _ts = int(time.time())
             resp = await c.get("https://ruoan486.icu/api/public-download/changelog.md?_t=" + str(_ts),
                                headers={"Cache-Control": "no-cache"})
             if resp.status_code == 200:
-                text = resp.text
-                CURRENT_CHANGELOG = text
-                return {"changelog": text}
+                return {"changelog": resp.text}
         return {"changelog": ""}
     except Exception as e:
         return {"changelog": f"获取更新日志失败: {e}"}
