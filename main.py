@@ -531,40 +531,200 @@ def _add_sync_log_internal(msg: str):
     log(msg)
 
 
-def _convert_qce_to_chatlab(qce_json: dict, peer_info: dict) -> dict:
-    """将 QCE JSON 转为 ChatLab Format"""
+def _convert_qce_to_chatlab(qce_json: dict, peer_info: dict,
+                            qce_export_dir: Path = None,
+                            json_file_dir: Path = None) -> dict:
+    """将 QCE JSON 转为 ChatLab Format
+
+    Args:
+        qce_json: QCE 导出的 JSON 数据
+        peer_info: 会话信息 {uid, name, type}
+        qce_export_dir: QCE 导出目录（兜底用，不传则跳过本地文件）
+        json_file_dir: JSON 文件所在目录（avatarPath 以此为准）
+    """
     chat_info = qce_json.get("chatInfo", {})
     messages = qce_json.get("messages", [])
     statistics = qce_json.get("statistics", {})
 
-    chat_type = peer_info.get("type", "private")
     peer_name = peer_info.get("name", "")
     peer_uid = peer_info.get("uid", "")
 
+    # ── 会话类型：优先 QCE 自身数据，外部传入仅作兜底 ──
+    qce_chat_type_raw = chat_info.get("chatType", chat_info.get("type", ""))
+    if isinstance(qce_chat_type_raw, int):
+        # QCE chatType: 2=群聊, 1=私聊
+        chat_type = "group" if qce_chat_type_raw == 2 else "private"
+    elif isinstance(qce_chat_type_raw, str):
+        raw_lower = qce_chat_type_raw.lower().strip()
+        # 兼容所有可能的群聊/私聊写法
+        if raw_lower in ["group", "chatroom", "room", "groupchat"]:
+            chat_type = "group"
+        elif raw_lower in ["private", "friend", "buddy", "c2c", "single"]:
+            chat_type = "private"
+        else:
+            chat_type = peer_info.get("type", "private")
+    else:
+        chat_type = peer_info.get("type", "private")
+
     # 从 chatInfo 获取真实会话名
     display_name = chat_info.get("name", "")
-    if not display_name:
+    if not display_name or display_name == peer_uid or display_name.isdigit():
         display_name = chat_info.get("peerName", chat_info.get("nick", ""))
-    if not display_name or display_name == peer_uid:
+    if not display_name or display_name == peer_uid or display_name.isdigit():
         display_name = peer_name or peer_uid
 
-    # 构建 UID → 用户名映射
+    # ── uin ↔ uid 双向映射（群聊双体系桥接）──
+    uin_to_uid = {}
+    uid_to_uin = {}
+    for m in chat_info.get("members", []):
+        if not isinstance(m, dict):
+            continue
+        uin = str(m.get("uin", "") or "").strip()
+        uid = str(m.get("uid", "") or "").strip()
+        if uin and uid:
+            uin_to_uid[uin] = uid
+            uid_to_uin[uid] = uin
+
+    # ── 统一的 ID 标准化函数（带 uin↔uid 桥接）──
+    def _normalize_id(d: dict, prefer_uin: bool = True) -> str:
+        """提取标准化用户ID，统一归一到 uin 体系
+        prefer_uin=True → 优先 uin，然后反查映射，最后兜底 uid/id
+        """
+        raw_uin = ""
+        raw_uid = ""
+        raw_id = ""
+        if isinstance(d, dict):
+            raw_uin = str(d.get("uin", "") or "").strip()
+            raw_uid = str(d.get("uid", "") or "").strip()
+            raw_id = str(d.get("id", "") or "").strip()
+        else:
+            raw = str(d or "").strip()
+            if raw.isdigit():
+                raw_uin = raw
+            else:
+                raw_uid = raw
+
+        if prefer_uin:
+            if raw_uin:
+                return str(int(raw_uin)) if raw_uin.isdigit() else raw_uin
+            # 用 uid 反查 uin
+            if raw_uid and raw_uid in uid_to_uin:
+                return uid_to_uin[raw_uid]
+            return raw_uid or raw_id
+        else:
+            if raw_uid:
+                return raw_uid
+            if raw_uin and raw_uin in uin_to_uid:
+                return uin_to_uid[raw_uin]
+            return raw_uin or raw_id
+
+    # ── 名称优先级函数（按场景）──
+    _CARD_NAME_KEYS = ["cardName", "card", "groupCard", "displayName", "nameCard"]
+    def _resolve_name(user: dict, is_peer: bool = False) -> str:
+        """根据会话类型决定名称优先级
+        群聊：cardName/groupCard(群名片) > nick(昵称) > uin/uid
+        私聊：peerRemark(备注) > remark > nick(昵称) > uin/uid
+        """
+        if chat_type == "group":
+            # 群聊：兼容所有常见群名片字段名
+            card = ""
+            for key in _CARD_NAME_KEYS:
+                val = user.get(key, "")
+                if isinstance(val, str) and val.strip():
+                    card = val.strip()
+                    break
+            if card:
+                return card
+        else:
+            # 私聊：对方优先取 chatInfo 顶层备注
+            if is_peer:
+                remark = (chat_info.get("peerRemark") or chat_info.get("friendRemark") or "").strip()
+                if remark:
+                    return remark
+            remark = (user.get("remark") or "").strip()
+            if remark:
+                return remark
+
+        # 通用兜底：name / nick / ID
+        name = (user.get("name") or user.get("nick") or "").strip()
+        if name:
+            return name
+        return _normalize_id(user)
+
+    # ── 构建标准化 UID → 用户名映射 ──
     uid_to_name = {}
-    self_uid = str(chat_info.get("selfUid", ""))
+    self_uid_raw = chat_info.get("selfUin") or chat_info.get("selfUid") or ""
+    self_uid = str(self_uid_raw).strip()
+    if self_uid.isdigit():
+        self_uid = str(int(self_uid))
     self_name = chat_info.get("selfName", chat_info.get("selfNick", ""))
     if self_uid:
         uid_to_name[self_uid] = self_name or self_uid
 
-    for s in statistics.get("senders", []):
-        if not isinstance(s, dict):
-            continue
-        uid = str(s.get("uid", ""))
-        if uid:
-            uid_to_name[uid] = s.get("name", s.get("uin", uid))
+    if chat_type == "group":
+        # 群聊：用 statistics.senders（key 是字符串 uid，和消息 sender 一致）
+        for s in statistics.get("senders", []):
+            if not isinstance(s, dict):
+                continue
+            uid = _normalize_id(s)
+            if uid:
+                uid_to_name[uid] = _resolve_name(s)
+        # 补充 chatInfo.members
+        for m in chat_info.get("members", []):
+            if not isinstance(m, dict):
+                continue
+            mid = _normalize_id(m)
+            if mid and mid not in uid_to_name:
+                uid_to_name[mid] = _resolve_name(m)
+        # 群聊peer兜底
+        if peer_uid and peer_uid not in uid_to_name:
+            uid_to_name[peer_uid] = display_name
+    else:
+        # 私聊：QCE v4 用数字 uin 做 sender，statistics 用字符串 uid
+        if peer_uid:
+            peer_remark = (chat_info.get("peerRemark") or chat_info.get("friendRemark") or "").strip()
+            if peer_remark:
+                uid_to_name[peer_uid] = peer_remark
+            else:
+                self_uid_raw_str = str(chat_info.get("selfUid", "") or "").strip()
+                peer_name_from_stats = ""
+                for s in statistics.get("senders", []):
+                    if not isinstance(s, dict):
+                        continue
+                    sid = str(s.get("uin", s.get("uid", "") or "")).strip()
+                    if sid and sid != self_uid_raw_str:
+                        peer_name_from_stats = (s.get("name") or s.get("nick") or "").strip()
+                # 如果 statistics 中名字无效（空/0/纯数字），用 display_name
+                if peer_name_from_stats and peer_name_from_stats != "0" and not peer_name_from_stats.isdigit():
+                    uid_to_name[peer_uid] = peer_name_from_stats
+                else:
+                    uid_to_name[peer_uid] = display_name
 
-    # peer 名字
-    if peer_uid and not uid_to_name.get(peer_uid):
-        uid_to_name[peer_uid] = display_name
+    # ── 用解析出的 peer 名覆盖会话标题 ──
+    if chat_type == "private" and peer_uid:
+        resolved = uid_to_name.get(peer_uid, "")
+        if resolved and resolved != peer_uid:
+            display_name = resolved
+
+    # ── 名称清洗：去除非打印字符 ──
+    _CLEANER = lambda n: "".join(c for c in n if c.isprintable() or c == ' ').strip()
+    display_name = _CLEANER(display_name) or peer_uid
+    for k in list(uid_to_name.keys()):
+        uid_to_name[k] = _CLEANER(uid_to_name[k]) or k
+
+    # ── 补充系统/匿名账号名称映射 ──
+    _SYSTEM_NAMES = {
+        "0": "系统消息",
+        "10000": "系统消息",
+        "system": "系统通知",
+        "notify": "通知",
+        "anonymous": "匿名用户",
+    }
+
+
+    for sys_id, sys_name in _SYSTEM_NAMES.items():
+        if sys_id not in uid_to_name:
+            uid_to_name[sys_id] = sys_name
 
     chatlab_data = {
         "chatlab": {"version": "0.0.2", "exportedAt": int(time.time()), "generator": "QCE2ChatLab/1.0"},
@@ -575,48 +735,103 @@ def _convert_qce_to_chatlab(qce_json: dict, peer_info: dict) -> dict:
     if chat_type == "group":
         chatlab_data["meta"]["groupId"] = peer_uid
 
-    # 提取头像 base64（QCE embedAvatarsAsBase64 导出时才有）
-    avatars_list = qce_json.get("avatars", [])
-    if not isinstance(avatars_list, list):
-        avatars_list = []
+    # ── 头像提取（兼容 list [{uin,b64}] 和 dict {uid: b64} 两种格式）──
+    avatars_raw = qce_json.get("avatars", {})
     avatars_map = {}
-    for av in avatars_list:
-        if not isinstance(av, dict):
-            continue
-        av_uid = str(av.get("uin", av.get("uid", "")))
-        av_b64 = av.get("base64", av.get("avatar", ""))
-        if av_uid and av_b64:
+    _AVATAR_B64_KEYS = ["base64", "avatar", "avatarBase64", "data", "content"]
+
+    if isinstance(avatars_raw, dict):
+        # QCE v4 格式：{uid_or_uin: base64_string}
+        for av_uid, av_b64_raw in avatars_raw.items():
+            if not isinstance(av_b64_raw, str) or len(av_b64_raw) < 10:
+                continue
+            av_b64 = av_b64_raw.strip().replace("\n", "").replace("\r", "")
+            if "data:image" in av_b64 and ";base64," in av_b64:
+                av_b64 = av_b64.split(";base64,", 1)[1]
+            avatars_map[str(av_uid).strip()] = av_b64
+    elif isinstance(avatars_raw, list):
+        # QCE 旧格式：[{uin, base64}, ...]
+        for av in avatars_raw:
+            if not isinstance(av, dict):
+                continue
+            av_uid = _normalize_id(av)
+            av_b64 = ""
+            for key in _AVATAR_B64_KEYS:
+                val = av.get(key, "")
+                if isinstance(val, str) and len(val) > 10:
+                    av_b64 = val.strip().replace("\n", "").replace("\r", "")
+                    break
+            if not av_uid or not av_b64:
+                continue
+            if "data:image" in av_b64 and ";base64," in av_b64:
+                av_b64 = av_b64.split(";base64,", 1)[1]
             avatars_map[av_uid] = av_b64
 
+    # 2) 本地头像文件兜底（基准路径 = JSON 文件所在目录）
+    base_dir = json_file_dir or qce_export_dir
+    if base_dir is not None:
+        import base64 as _b64
+        # 从 chatInfo.members + statistics.senders 两个来源扫头像路径
+        all_avatar_candidates = list(chat_info.get("members", []))
+        all_avatar_candidates.extend(statistics.get("senders", []))
+        for m in all_avatar_candidates:
+            if not isinstance(m, dict):
+                continue
+            m_uid = _normalize_id(m)
+            if not m_uid or m_uid in avatars_map:
+                continue
+            avatar_path = (m.get("avatarPath") or m.get("avatar") or "").strip()
+            if not avatar_path:
+                continue
+            full_path = base_dir / avatar_path
+            if full_path.exists():
+                try:
+                    avatars_map[m_uid] = _b64.b64encode(full_path.read_bytes()).decode("utf-8")
+                except Exception:
+                    pass
+
+    # 3) MIME 检测
+    def _detect_mime(b64: str) -> str:
+        if b64.startswith("/9j/"):
+            return "image/jpeg"
+        if b64.startswith("UklGR"):
+            return "image/webp"
+        if b64.startswith("R0lG"):
+            return "image/gif"
+        return "image/png"
+
+    # ── 构建成员列表（只发送真实用户，跳过系统 ID）──
+    _SKIP_IDS = {"0", "10000", "system", "notify", "anonymous", "-1", "self", "sys"}
     for uid, name in uid_to_name.items():
-        member_entry = {"platformId": uid, "accountName": name}
+        if str(uid).strip() in _SKIP_IDS:
+            continue
+        clean_name = "".join(c for c in name if c.isprintable() or c == ' ')
+        clean_name = clean_name.strip() or uid
+        member_entry = {"platformId": uid, "accountName": clean_name}
         if uid in avatars_map:
-            mime = "image/png"
-            if avatars_map[uid].startswith("/9j/"):
-                mime = "image/jpeg"
-            member_entry["avatar"] = f"data:{mime};base64,{avatars_map[uid]}"
+            b64_clean = avatars_map[uid].strip().replace("\n", "").replace("\r", "")
+            mime = _detect_mime(b64_clean)
+            member_entry["avatar"] = f"data:{mime};base64,{b64_clean}"
         chatlab_data["members"].append(member_entry)
 
+    # ── 处理消息 ──
     for msg in messages:
         # sender: 可能是对象 {uid, name} 或纯字符串
         s = msg.get("sender", "")
         if isinstance(s, dict):
-            sender_id = str(s.get("uid", s.get("uin", "")))
+            sender_id = _normalize_id(s)
         else:
             sender_id = str(s) if s else ""
 
-        s_name = ""
-        if isinstance(s, dict):
-            s_name = s.get("name", s.get("nick", ""))
-
         if not sender_id:
-            sender_id = str(msg.get("senderUid", msg.get("account", "")))
-        if not s_name:
-            s_name = uid_to_name.get(sender_id, sender_id or "SYSTEM")
+            sender_id = str(msg.get("senderUin", msg.get("senderUid", msg.get("account", ""))))
 
-        # 补充 members
+        # 名称强制从 uid_to_name 映射取，杜绝漂移
+        s_name = uid_to_name.get(sender_id, sender_id or "SYSTEM")
+
+        # 补充 members（消息里有但统计里没有的新用户）
         if sender_id and sender_id not in uid_to_name:
-            chatlab_data["members"].append({"platformId": sender_id, "accountName": s_name})
+            chatlab_data["members"].append({"platformId": sender_id, "accountName": _CLEANER(s_name) or sender_id})
             uid_to_name[sender_id] = s_name
 
         ts = msg.get("timestamp", 0)
@@ -631,7 +846,6 @@ def _convert_qce_to_chatlab(qce_json: dict, peer_info: dict) -> dict:
         if isinstance(c, dict):
             text = c.get("text", "")
             if not text:
-                # elements 里的 text
                 for el in c.get("elements", []):
                     if el.get("type") == "text":
                         d = el.get("data", {}) if isinstance(el.get("data"), dict) else {}
@@ -642,7 +856,7 @@ def _convert_qce_to_chatlab(qce_json: dict, peer_info: dict) -> dict:
             text = str(c)
 
         if not text:
-            text = "[消息]"
+            text = "[消息 图片/文件/语音]" if c else "[消息]"
 
         mid = str(msg.get("msgId", msg.get("id", msg.get("seq", ""))))
         if not mid:
@@ -784,6 +998,14 @@ def _ensure_services_running(config: dict):
 
     # 检查 ChatLab
     chatlab_ok = _check_service(chatlab_url, chatlab_port)
+    if chatlab_ok:
+        try:
+            clh = get_chatlab_headers(config)
+            sr = httpx.get(f"{chatlab_url}/api/v1/status", headers=clh, timeout=3)
+            sd = sr.json()
+            log(f"📦 ChatLab v{sd.get('data',{}).get('version','?')}, 会话数: {sd.get('data',{}).get('sessionCount','?')}")
+        except Exception:
+            pass
     if not chatlab_ok:
         _launch_script(chatlab_script, "ChatLab", chatlab_url, chatlab_port)
 
@@ -935,18 +1157,31 @@ def _run_full_sync(config: dict, state: dict, source: str = "manual") -> dict:
             # 清理非法文件名
             custom_filename = custom_filename.replace("/", "_").replace("\\", "_").replace(":", "_")
 
+            # 构造导出参数（QCE v4 完整格式）
+            session_name = peer.get("name", peer_name)
+            now_ts = int(time.time())
             export_params = {
                 "peer": {
                     "chatType": 2 if peer_type == "group" else 1,
                     "peerUid": peer_uid,
+                    "guildId": "",
                 },
+                "sessionName": session_name,
                 "format": export_format,
-                "timeRangeType": "recent",
-                "timeRangeDays": time_range_days,
-                "exportMedia": export_media,
-                "downloadMedia": export_media,
+                "filter": {
+                    "startTime": now_ts - time_range_days * 86400,
+                    "endTime": now_ts,
+                    "includeRecalled": False,
+                    "includeSystemMessages": True,
+                },
                 "options": {
+                    "batchSize": 5000,
+                    "includeResourceLinks": True,
+                    "includeSystemMessages": True,
+                    "filterPureImageMessages": True,
+                    "prettyFormat": True,
                     "embedAvatarsAsBase64": True,
+                    "preferGroupMemberName": True,
                 },
                 "fileName": custom_filename,
             }
@@ -1072,9 +1307,13 @@ def _run_full_sync(config: dict, state: dict, source: str = "manual") -> dict:
 
             _add_sync_log_internal(f"  读取到 {len(qce_data.get('messages',[]))} 条消息")
 
+
+
             # 转换格式
             _sync_progress["detail"] = "转换格式..."
-            chatlab_data, avatar_count = _convert_qce_to_chatlab(qce_data, peer)
+            chatlab_data, avatar_count = _convert_qce_to_chatlab(
+                qce_data, peer, qce_export_dir, json_file_dir=export_file_path.parent
+            )
             _add_sync_log_internal(f"  转换完成: {len(chatlab_data['messages'])} 条消息, {len(chatlab_data['members'])} 个成员, {avatar_count} 个头像")
 
             # 分批导入（使用 imports/:sessionId 路由，首次自动创建会话）
@@ -1084,17 +1323,33 @@ def _run_full_sync(config: dict, state: dict, source: str = "manual") -> dict:
             batch_size = 5000
 
             import_error = None
+            total_msgs = len(chatlab_data["messages"])
+            batch_size = 5000
+            # 检查会话是否已存在：已存在则不传 accountName（不覆盖手动改名）
+            session_exists = False
+            try:
+                sr = httpx.get(f"{chatlab_base}/api/v1/sessions/{session_id}", headers=chatlab_headers, timeout=5)
+                session_exists = sr.status_code == 200
+            except Exception:
+                pass
+            # 构建成员列表（已有会话只传 platformId + avatar，不传 accountName）
+            if session_exists:
+                import_members = [{"platformId": m["platformId"], "avatar": m.get("avatar","")} for m in chatlab_data["members"] if m.get("avatar")]
+                _add_sync_log_internal(f"  ℹ️ 会话已存在, 仅更新 {len(import_members)} 个头像")
+            else:
+                import_members = chatlab_data["members"]
+
             for i in range(0, total_msgs, batch_size):
                 batch = chatlab_data["messages"][i:i + batch_size]
                 is_first = (i == 0)
-
                 import_body = {
                     "chatlab": chatlab_data["chatlab"],
                     "messages": batch,
+                    "members": import_members,
+                    "options": {"metaUpdateMode": "none", "memberUpdateMode": "upsert"},
                 }
-                if is_first:
+                if is_first and not session_exists:
                     import_body["meta"] = chatlab_data["meta"]
-                    import_body["members"] = chatlab_data["members"]
 
                 try:
                     # 调试：打印第一条消息样例
@@ -1104,7 +1359,9 @@ def _run_full_sync(config: dict, state: dict, source: str = "manual") -> dict:
                         _add_sync_log_internal(f"  [DEBUG] meta: {json.dumps(chatlab_data.get('meta',{}), ensure_ascii=False)[:200]}")
                         _add_sync_log_internal(f"  [DEBUG] members 数量: {len(chatlab_data.get('members',[]))}")
                         if chatlab_data.get("members"):
-                            _add_sync_log_internal(f"  [DEBUG] 第一个成员: {json.dumps(chatlab_data['members'][0], ensure_ascii=False)}")
+                            for j, m in enumerate(chatlab_data['members'][:2]):
+                                d = {k:v for k,v in m.items() if k != 'avatar'}
+                                _add_sync_log_internal(f"  [DEBUG] 成员{j}: {json.dumps(d, ensure_ascii=False)[:150]}")
 
                     import_resp = httpx.post(
                         f"{chatlab_base}/api/v1/imports/{session_id}",
@@ -1115,11 +1372,21 @@ def _run_full_sync(config: dict, state: dict, source: str = "manual") -> dict:
                     ir = import_resp.json()
                     if ir.get("success"):
                         created = ir.get("data", {}).get("created", False)
-                        session_name = ir.get("data", {}).get("sessionId", session_id)
                         wc = ir.get("data", {}).get("batch", {}).get("writtenCount", len(batch))
-                        dc = ir.get("data", {}).get("batch", {}).get("duplicateCount", 0)
                         flag = "🆕" if created else ""
-                        _add_sync_log_internal(f"  ✅ 批次 {i//batch_size+1}: {flag} 写入 {wc} 条, 去重 {dc} 条, session={session_name}")
+                        _add_sync_log_internal(f"  ✅ 批次 {i+1}: {flag} 写入 {wc} 条, session={session_id}")
+                        # 查 ChatLab 端实际存了什么成员
+                        if is_first:
+                            try:
+                                mr = httpx.get(f"{chatlab_base}/api/v1/sessions/{session_id}/members", headers=chatlab_headers, timeout=10)
+                                if mr.status_code == 200:
+                                    md = mr.json()
+                                    mems = md.get("data", [])
+                                    _add_sync_log_internal(f"  [DEB] ChatLab端成员({len(mems)}个): {[{{'id':m.get('platformId','?'), 'name':m.get('accountName','?')}} for m in mems[:3]]}")
+                                else:
+                                    _add_sync_log_internal(f"  [DEB] 查成员失败 HTTP {mr.status_code}")
+                            except Exception as ee:
+                                _add_sync_log_internal(f"  [DEB] 查成员异常: {ee}")
                     else:
                         err_msg = str(ir.get("error","导入返回失败"))
                         _add_sync_log_internal(f"  ❌ 导入失败: {err_msg}")
@@ -1708,7 +1975,7 @@ async def api_set_install_dir(body: SetInstallDir):
 
 # ── 自动更新 API ─────────────────────────────────────────
 
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 # 更新通过 portal 后台文件下载。由于 portal 需要 admin 登录，
 # 改为比较本地记录的版本号与远程文件的检查方式：
 # 直接下载 tar.gz 的 header (Range 请求) 看 if-modified 或者比较本地记录的版本
