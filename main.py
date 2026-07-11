@@ -131,29 +131,24 @@ def _get_startup_shortcut_path() -> Path:
 
 
 def _get_app_exe_path() -> Path:
-    """当前 Python 解释器路径或打包后的 exe 路径"""
+    """当前脚本路径（打包 exe 时返回 exe 路径）"""
     if getattr(sys, 'frozen', False):
         return Path(sys.executable)
-    return Path(sys.executable)
+    return Path(__file__)
 
 
 _autostart_timer: threading.Timer | None = None
 
 
 def enable_autostart(config: dict):
-    """写入启动文件夹批处理"""
+    """写入启动文件夹批处理（与同步工具同款方式）"""
     shortcut = _get_startup_shortcut_path()
     shortcut.parent.mkdir(parents=True, exist_ok=True)
 
-    exe_path = _get_app_exe_path()
-    work_dir = Path(config["app"].get("install_dir", "")) if config["app"].get("install_dir") else exe_path.parent
-    port = config["app"].get("port", 15520)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    port = config.get("app", {}).get("port", 15520)
 
-    # 写一个 bat 文件（更可靠，且可以静默启动）
-    bat_content = f'''@echo off
-cd /d "{work_dir}"
-start "" /min "{exe_path}" --port {port} --no-browser
-'''
+    bat_content = f'@echo off\r\ncd /d "{script_dir}"\r\nstart "" /min "bg_start.bat"  # port {port} --no-browser\r\nexit'
     shortcut.write_text(bat_content, encoding="utf-8")
     log(f"开机自启已启用: {shortcut}")
 
@@ -172,6 +167,34 @@ def disable_autostart():
 
 def is_autostart_enabled() -> bool:
     return _get_startup_shortcut_path().exists()
+
+
+def _ensure_bg_start_copy():
+    try:
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        src = os.path.join(app_dir, "\u540e\u53f0\u542f\u52a8.bat")
+        dst = os.path.join(app_dir, "bg_start.bat")
+        if os.path.exists(src) and not os.path.exists(dst):
+            import shutil
+            shutil.copy2(src, dst)
+    except Exception:
+        pass
+
+
+_ensure_bg_start_copy()
+
+
+def _ensure_autostart_current():
+    """每次启动时同步开机自启地址为当前路径（与同步工具同款方式）"""
+    try:
+        sp = _get_startup_shortcut_path()
+        if not sp.parent.exists():
+            sp.parent.mkdir(parents=True, exist_ok=True)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        content = f'@echo off\r\ncd /d "{script_dir}"\r\nstart "" /min "bg_start.bat"  # port 15520 --no-browser\r\nexit'
+        sp.write_text(content, encoding="utf-8")
+    except Exception:
+        pass  # 静默失败，不影响启动
 
 
 # ── 定时同步调度器 ────────────────────────────────────────
@@ -1078,10 +1101,15 @@ def run_sync_sync(config: dict, state: dict, source: str = "manual") -> dict:
 
                 elif action == "sync_now":
                     _add_sync_log_internal("用户选择立即同步，终止 QQ 进程...")
+                    _sync_progress["status"] = "running"
+                    _sync_progress["detail"] = "正在启动 QCE..."
                     _kill_qq()
                     # 启动 QCE（会自动拉 QQ）
                     if qce_script:
                         _ensure_services_running(config)
+                    # 等待 30 秒让 QCE 启动完成
+                    _add_sync_log_internal("等待 30 秒让 QCE 就绪...")
+                    time.sleep(30)
             else:
                 _add_sync_log_internal("⚠ 未配置 QCE 和 QQ 启动脚本，跳过同步")
                 _sync_progress["status"] = "idle"
@@ -1967,7 +1995,7 @@ async def api_set_install_dir(body: SetInstallDir):
 
 # ── 自动更新 API ─────────────────────────────────────────
 
-VERSION = "1.5.0"
+VERSION = "1.5.2"
 # 更新通过 portal 后台文件下载。由于 portal 需要 admin 登录，
 # 改为比较本地记录的版本号与远程文件的检查方式：
 # 直接下载 tar.gz 的 header (Range 请求) 看 if-modified 或者比较本地记录的版本
@@ -2341,10 +2369,8 @@ def main():
 
     config = load_config()
 
-    # 恢复开机自启状态
-    if config.get("app", {}).get("autostart"):
-        if not is_autostart_enabled():
-            enable_autostart(config)
+    # 每次启动同步开机自启地址为当前路径（工具被移动后也能自动修正）
+    _ensure_autostart_current()
 
     # 恢复定时同步
     if config.get("sync", {}).get("auto_sync_enabled"):
