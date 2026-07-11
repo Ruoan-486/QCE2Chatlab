@@ -1,6 +1,6 @@
 {
   "name": "qce2chatlab",
-  "version": "1.5.0",
+  "version": "1.0.0",
   "description": "QQ聊天记录自动同步工具 - 从QCE自动导出并导入ChatLab",
   "main": "main.py",
   "scripts": {
